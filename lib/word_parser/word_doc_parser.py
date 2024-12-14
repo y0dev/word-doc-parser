@@ -1,8 +1,10 @@
 import os
-import json
 from docx import Document
 from lxml import etree
 import utils.common_utils as comm_utils
+from utils.time_to_read import TimeToRead
+from .tags import Tags
+from .image import Image
 
 class WordDocParser:
     """
@@ -28,6 +30,7 @@ class WordDocParser:
         except PermissionError:
             raise PermissionError(f"Cannot open the file {file_path}. Check read-only permissions.")
         self.__desc_start = False
+        self.__word_count = 0
         self.data = {
             "metadata": {"id":"","type":"","title":"", "description":""},
             "headings": [],
@@ -77,13 +80,14 @@ class WordDocParser:
                 found_list = self.extract_lists(paragraph, paragraph_data)
                 found_image = self.__extract_images_from_para(paragraph, paragraph_data)
 
-                # Check for images in this paragraph
-                # found_image = self.extract_images(paragraph, paragraph_data)
                 if not found_list and not found_image:
+                    self.__word_count += len(paragraph.text.strip())
                     if current_heading:
                         current_heading["paragraphs"].append(paragraph_data)
                     else:
                         self.data["paragraphs"].append(paragraph_data)
+        time_to_read = TimeToRead(self.__word_count)
+        self.data["metadata"]["time_to_read"] = time_to_read.get_time_as_obj()
 
     def __extract_formatted_phrases(self, paragraph, paragraph_data):
         """
@@ -103,7 +107,6 @@ class WordDocParser:
 
         for run in paragraph.runs:
             word = run.text.strip()
-            # print(run, word)
 
             if run.bold:
                 bold_phrase.append(word)
@@ -290,6 +293,8 @@ class WordDocParser:
                 "caption": caption
             })
 
+    def __extract_code(self, paragraph):
+        pass
 
     def __update_metadata(self, paragraph):
         """
@@ -308,10 +313,14 @@ class WordDocParser:
             return True
 
         if text.startswith("article-id"):
-            self.data["metadata"]["id"] = text.split("=")[1].strip()
+            self.data["metadata"]["id"] = text.split("=")[1].strip().replace(" ","-")
             return True
         elif text.startswith("article-type"):
+            tags = Tags(text.split("=")[1].strip())
+            image = Image(text.split("=")[1].strip())
             self.data["metadata"]["type"] = text.split("=")[1].strip()
+            self.data["metadata"]["tags"] = tags.get_tag_list()
+            self.data["metadata"]["image"] = image.get_image()
             return True
         elif text.startswith("article-title"):
             self.data["metadata"]["title"] = text.split("=")[1].strip()
@@ -320,7 +329,7 @@ class WordDocParser:
             self.__desc_start = True
             return True
         return False
-
+    
     def parse_document(self):
         """
         The main method to initiate the parsing process.
@@ -334,4 +343,11 @@ class WordDocParser:
         """
         self.__extract_images()
         self.extract_headings()
+        timestamp = None
+        if comm_utils.confirm_update("Do you want to update the list of choices?"):
+            timestamp = comm_utils.get_user_date() 
+        else:
+            timestamp = comm_utils.get_file_creation_time(self.file_path)
+        self.data["metadata"]["date"] = str(comm_utils.generate_timestamp_millis(timestamp))
+
         return self.data

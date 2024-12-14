@@ -1,2 +1,55 @@
 input_docs
 output
+
+# Python
+*.pyc
+*.pyo
+__pycache__/
+.pytest_cache/
+.coverage
+.DS_Store
+.ipynb_checkpoints/
+
+# Virtual environments
+.venv/
+venv/
+env/
+virtualenv/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+.eggs/
+
+# Testing
+.pytest_cache/
+nosetests.xml
+
+# IDE-specific files
+*.vscode/
+.idea/
+.project
+.pydevproject
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# Sphinx documentation
+docs/_build/
+
+# Local configuration files
+.env
+.local.settings.json
+.secrets.yml
+
+# Editor/IDE settings
+*.sublime-project
+*.sublime-workspace
+
+# Logs
+*.log
+*.err
+
+# Temporary files
+*~
