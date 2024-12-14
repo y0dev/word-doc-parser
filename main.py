@@ -48,13 +48,13 @@ if __name__ == "__main__":
     file_name, _ = os.path.splitext(os.path.basename(selected_file)) 
 
     # Create the output file path
-    output_dir = "output/json"
+    output_dir = "output"
     os.makedirs(output_dir, exist_ok=True)  # Create the output directory if it doesn't exist
-    output_file = os.path.join(output_dir, f"{file_name.lower()}.json") 
+    output_file = os.path.join(output_dir,"json", f"{file_name.lower()}.json") 
 
     print(f"Output file: {output_file}") 
 
-    parser = WordDocParser(selected_file)
+    parser = WordDocParser(selected_file, output_dir)
     extracted_data = parser.parse_document()
 
     saver = DataSaver(extracted_data, output_file)

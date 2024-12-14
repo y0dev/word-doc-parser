@@ -1,12 +1,15 @@
+import os
 import json
 from docx import Document
+from lxml import etree
+import utils.common_utils as comm_utils
 
 class WordDocParser:
     """
     This class parses a Word document (.docx) and extracts specific data.
     """
 
-    def __init__(self, file_path):
+    def __init__(self, file_path, output_dir):
         """
         Initializes the WordDocParser object with the file path.
 
@@ -17,6 +20,9 @@ class WordDocParser:
             PermissionError: If the file cannot be opened due to permission issues.
         """
         self.file_path = file_path
+        file_name, _ = os.path.splitext(os.path.basename(file_path)) 
+        self.output_dir = os.path.join(output_dir, file_name)
+        os.makedirs(self.output_dir.lower() , exist_ok=True)  # Create the output directory if it doesn't exist
         try:
             self.document = Document(file_path)
         except PermissionError:
@@ -25,7 +31,8 @@ class WordDocParser:
         self.data = {
             "metadata": {"id":"","type":"","title":"", "description":""},
             "headings": [],
-            "paragraphs": []
+            "paragraphs": [],
+            "images": []
         }
 
     def extract_headings(self):
@@ -45,7 +52,7 @@ class WordDocParser:
         for paragraph in self.document.paragraphs:
             if not paragraph.text: continue
             
-            if self._update_metadata(paragraph):
+            if self.__update_metadata(paragraph):
                 continue
 
             if paragraph.style.name.startswith('Heading'):
@@ -61,17 +68,24 @@ class WordDocParser:
                     "bold_phrases": [],
                     "italic_phrases": [],
                     "underlined_phrases": [],
-                    "lists": []
+                    "lists": [],
+                    "images": [],
+                    "links": [],
                 }
-                self.extract_formatted_phrases(paragraph, paragraph_data)
+                self.__extract_formatted_phrases(paragraph, paragraph_data)
+                self.__extract_links(paragraph, paragraph_data)
                 found_list = self.extract_lists(paragraph, paragraph_data)
-                if not found_list:
+                found_image = self.__extract_images_from_para(paragraph, paragraph_data)
+
+                # Check for images in this paragraph
+                # found_image = self.extract_images(paragraph, paragraph_data)
+                if not found_list and not found_image:
                     if current_heading:
                         current_heading["paragraphs"].append(paragraph_data)
                     else:
                         self.data["paragraphs"].append(paragraph_data)
 
-    def extract_formatted_phrases(self, paragraph, paragraph_data):
+    def __extract_formatted_phrases(self, paragraph, paragraph_data):
         """
         Extracts phrases that are entirely bold, italic, or underlined within a paragraph.
 
@@ -89,6 +103,7 @@ class WordDocParser:
 
         for run in paragraph.runs:
             word = run.text.strip()
+            # print(run, word)
 
             if run.bold:
                 bold_phrase.append(word)
@@ -114,6 +129,35 @@ class WordDocParser:
             paragraph_data["italic_phrases"].append(" ".join(italic_phrase))
         if underlined_phrase:
             paragraph_data["underlined_phrases"].append(" ".join(underlined_phrase))
+    
+    def __extract_links(self, paragraph, paragraph_data):
+        """
+        Extracts hyperlinks within a paragraph.
+
+        Checks if the paragraph contains any hyperlinks and extracts their text and target URL.
+        
+        Args:
+            paragraph (docx.paragraph.Paragraph): A paragraph object from the Word document.
+            paragraph_data (dict): A dictionary to store extracted data for the current paragraph.
+        """
+        # Initialize an empty list to store links
+        links = []
+        xml_content = paragraph._element
+        for rel in xml_content.findall(".//{http://schemas.openxmlformats.org/wordprocessingml/2006/main}hyperlink"):
+            # Extract relationship ID
+            link_id = rel.get("{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id")
+            if link_id and link_id in self.document.part.rels:
+                # Get link target and text
+                link_target = self.document.part.rels[link_id]._target
+                link_text = "".join(t.text for t in rel.findall(".//{http://schemas.openxmlformats.org/wordprocessingml/2006/main}t"))
+                links.append({
+                    "text": link_text,
+                    "target": link_target
+                })
+
+        # Store the extracted links in the paragraph data dictionary
+        if links:
+            paragraph_data['links'] = links
 
 
     def extract_lists(self, paragraph, paragraph_data):
@@ -138,9 +182,6 @@ class WordDocParser:
                     last_list_container = self.data["headings"][-1]["paragraphs"][-1]
             elif len(self.data["paragraphs"]) > 0:
                 last_list_container = self.data["paragraphs"][-1]
-
-            json_string = json.dumps(last_list_container, indent=4)
-            print(json_string)
 
             if last_list_container:
                 last_list = last_list_container["lists"][-1] if len(last_list_container["lists"]) > 0 else None
@@ -169,9 +210,69 @@ class WordDocParser:
                 })
             return True
         return False
+    def __extract_images_from_para(self, paragraph, paragraph_data):
+
+        last_list_container = None
+        if len(self.data["headings"]) > 0:
+            if len(self.data["headings"][-1]["paragraphs"]) > 0:
+                last_list_container = self.data["headings"][-1]["paragraphs"][-1]
+        elif len(self.data["paragraphs"]) > 0:
+            last_list_container = self.data["paragraphs"][-1]
+
+        for image in self.data["images"]:
+            if image["caption"] == paragraph.text.strip():
+                if last_list_container:
+                    last_list_container["images"].append({
+                        "id": image["id"],
+                        "caption": image["caption"]
+                    })
+                else:
+                    paragraph_data["images"].append({
+                        "id": image["id"],
+                        "caption": image["caption"]
+                    })
+                return True
+        return False
 
 
-    def _update_metadata(self, paragraph):
+    def __extract_images(self):
+        """
+        Extracts images and their captions from the paragraph and adds them to paragraph_data.
+        """
+        output_dir = os.path.join(self.output_dir, "images")
+        os.makedirs(output_dir , exist_ok=True)  # Create the output directory if it doesn't exist
+        # Extract embedded images
+        for i, shape in enumerate(self.document.inline_shapes):
+            # Get the image data from the relationship part
+            image_data = shape._inline.graphic.graphicData.pic.blipFill.blip.embed
+            image_part = self.document.part.related_parts[image_data]
+
+            # Save the image to a file
+            image_filename = os.path.join(output_dir, f"extracted_image_{i + 1}.jpg")
+            
+            with open(image_filename, "wb") as f:
+                f.write(image_part.blob)
+            
+            # Find corresponding caption
+            caption = ""
+            found_image = False
+            for para in self.document.paragraphs:
+                if image_data in para._element.xml:
+                    found_image = True
+                elif found_image:
+                    # Check if next paragraph is a caption
+                    if para.style.name.lower() == "caption":
+                        caption = para.text.strip()
+                    break
+            print(f"Saved image: {image_filename}")
+            self.data["images"].append({
+                "id": f"{comm_utils.fill_string_with_zeros(i+1,3)}",
+                "data": image_data,
+                "caption": caption
+            })
+
+
+    def __update_metadata(self, paragraph):
         """
         Private helper function to update the metadata dictionary based on specific keywords.
 
@@ -212,5 +313,6 @@ class WordDocParser:
         Returns:
             dict: A dictionary containing extracted information from the document.
         """
+        self.__extract_images()
         self.extract_headings()
         return self.data
