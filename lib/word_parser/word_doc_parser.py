@@ -237,36 +237,55 @@ class WordDocParser:
 
     def __extract_images(self):
         """
-        Extracts images and their captions from the paragraph and adds them to paragraph_data.
+        Extracts images and their captions from the Word document and adds them to the data structure.
+
+        This function iterates through inline shapes (embedded images) within the document.
+        For each image, it:
+            1. Extracts the image data from the relationship part.
+            2. Saves the image data to a file with a descriptive filename (e.g., extracted_image_1.jpg).
+            3. Attempts to find a corresponding caption:
+                - Checks paragraphs following the image's location in the document.
+                - If the next paragraph has the "caption" style, extracts its text as the caption.
+            4. Adds an entry to the "images" list within the `data` dictionary.
+                - The entry includes:
+                    - "id": A unique identifier for the image, formatted with leading zeros using `comm_utils.fill_string_with_zeros`.
+                    - "data": The extracted image data.
+                    - "caption": The extracted caption text (if available).
+
+        Args:
+            self: An instance of the class responsible for document processing.
         """
+
+        # Create output directory for extracted images (if it doesn't exist)
         output_dir = os.path.join(self.output_dir, "images")
-        os.makedirs(output_dir , exist_ok=True)  # Create the output directory if it doesn't exist
+        os.makedirs(output_dir, exist_ok=True)
+
         # Extract embedded images
         for i, shape in enumerate(self.document.inline_shapes):
-            # Get the image data from the relationship part
+            # Get image data and related part
             image_data = shape._inline.graphic.graphicData.pic.blipFill.blip.embed
             image_part = self.document.part.related_parts[image_data]
 
-            # Save the image to a file
+            # Save image to a file
             image_filename = os.path.join(output_dir, f"extracted_image_{i + 1}.jpg")
-            
             with open(image_filename, "wb") as f:
                 f.write(image_part.blob)
-            
-            # Find corresponding caption
+
+            # Find corresponding caption (if any)
             caption = ""
             found_image = False
             for para in self.document.paragraphs:
-                if image_data in para._element.xml:
+                if image_data in para._element.xml:  # Check if image data is present in paragraph XML
                     found_image = True
-                elif found_image:
-                    # Check if next paragraph is a caption
+                elif found_image:  # Check next paragraph if image data found previously
                     if para.style.name.lower() == "caption":
-                        caption = para.text.strip()
+                        caption = para.text.strip()  # Extract caption text if paragraph style is "caption"
                     break
+
+            # Print confirmation and add image data to output
             print(f"Saved image: {image_filename}")
             self.data["images"].append({
-                "id": f"{comm_utils.fill_string_with_zeros(i+1,3)}",
+                "id": f"{comm_utils.fill_string_with_zeros(i+1,3)}",  # Create unique ID with leading zeros
                 "data": image_data,
                 "caption": caption
             })
