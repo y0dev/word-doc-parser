@@ -29,11 +29,16 @@ class WordDocParser:
 
     def extract_headings(self):
         """
-        Extracts all headings from the document based on their paragraph style.
+        Extracts all headings from the document based on their paragraph style
+        and stores them in a hierarchical structure with nested paragraphs.
 
-        Iterates through each paragraph and checks if its style name starts with
-        "Heading". If so, it adds an entry to the "headings" list in the `data`
-        dictionary with the heading text and its level (style name).
+        Iterates through each paragraph. If the paragraph style indicates a heading,
+        a new dictionary entry is created with heading text, level, and an empty
+        "paragraphs" list to hold nested content. Otherwise, it extracts formatted
+        phrases and lists within the paragraph and adds them to a separate dictionary
+        representing the paragraph data. This dictionary is then appended either to
+        the current heading's "paragraphs" list (if inside a heading) or to the main
+        "paragraphs" list in the `data` dictionary.
         """
         current_heading = None
         for paragraph in self.document.paragraphs:
@@ -54,6 +59,7 @@ class WordDocParser:
             elif paragraph.text.lower().startswith('description'):
                 self.__desc_start = True
                 continue
+
             if paragraph.style.name.startswith('Heading'):
                 current_heading = {
                     "text": paragraph.text.strip(),
@@ -76,7 +82,19 @@ class WordDocParser:
                     self.data["paragraphs"].append(paragraph_data)
 
     def extract_formatted_phrases(self, paragraph, paragraph_data):
-        """ Extract phrases that are fully bold or italic """
+        """
+        Extracts phrases that are entirely bold or italic within a paragraph.
+
+        Iterates through each text run (formatted text segment) in the paragraph.
+        Maintains temporary lists for ongoing bold and italic phrases. It only adds
+        a phrase to the corresponding list in the `paragraph_data` dictionary
+        ("bold_phrases" or "italic_phrases") when the phrase ends (no longer bold/italic).
+        This ensures that only complete formatted phrases are captured.
+
+        Args:
+            paragraph (docx.paragraph.Paragraph): A paragraph object from the Word document.
+            paragraph_data (dict): A dictionary to store extracted data for the current paragraph.
+        """
         bold_phrase, italic_phrase = [], []
 
         for run in paragraph.runs:
@@ -100,7 +118,18 @@ class WordDocParser:
             paragraph_data["italic_phrases"].append(" ".join(italic_phrase))
 
     def extract_lists(self, paragraph, paragraph_data):
-        """ Extract numbered and bulleted lists """
+        """
+        Extracts numbered and bulleted lists within a paragraph.
+
+        Checks if the paragraph style indicates a list ("List Paragraph"). If so,
+        it extracts the list text and its indent level. The indent level helps
+        identify the nesting of lists within the document. The extracted information
+        is then added as a dictionary to the "lists" list within the `paragraph_data` dictionary.
+
+        Args:
+            paragraph (docx.paragraph.Paragraph): A paragraph object from the Word document.
+            paragraph_data (dict): A dictionary to store extracted data for the current paragraph.
+        """
         if paragraph.style.name in ['List Paragraph']: 
             list_text = paragraph.text.strip()
             indent_level = paragraph.paragraph_format.left_indent.pt if paragraph.paragraph_format.left_indent else 0
