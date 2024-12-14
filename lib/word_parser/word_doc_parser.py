@@ -1,3 +1,4 @@
+import json
 from docx import Document
 
 class WordDocParser:
@@ -43,21 +44,8 @@ class WordDocParser:
         current_heading = None
         for paragraph in self.document.paragraphs:
             if not paragraph.text: continue
-            if self.__desc_start:
-                self.data["metadata"]["description"] = paragraph.text.lower().strip()
-                self.__desc_start = False
-                continue
-            if paragraph.text.lower().startswith('article-id'):
-                self.data["metadata"]["id"] = paragraph.text.lower().split('=')[1].strip()
-                continue
-            elif paragraph.text.lower().startswith('article-type'):
-                self.data["metadata"]["type"] = paragraph.text.lower().split('=')[1].strip()
-                continue
-            elif paragraph.text.lower().startswith('article-title'):
-                self.data["metadata"]["title"] = paragraph.text.lower().split('=')[1].strip()
-                continue
-            elif paragraph.text.lower().startswith('description'):
-                self.__desc_start = True
+            
+            if self._update_metadata(paragraph):
                 continue
 
             if paragraph.style.name.startswith('Heading'):
@@ -72,30 +60,32 @@ class WordDocParser:
                     "text": paragraph.text.strip(),
                     "bold_phrases": [],
                     "italic_phrases": [],
+                    "underlined_phrases": [],
                     "lists": []
                 }
                 self.extract_formatted_phrases(paragraph, paragraph_data)
-                self.extract_lists(paragraph, paragraph_data)
-                if current_heading:
-                    current_heading["paragraphs"].append(paragraph_data)
-                else:
-                    self.data["paragraphs"].append(paragraph_data)
+                found_list = self.extract_lists(paragraph, paragraph_data)
+                if not found_list:
+                    if current_heading:
+                        current_heading["paragraphs"].append(paragraph_data)
+                    else:
+                        self.data["paragraphs"].append(paragraph_data)
 
     def extract_formatted_phrases(self, paragraph, paragraph_data):
         """
-        Extracts phrases that are entirely bold or italic within a paragraph.
+        Extracts phrases that are entirely bold, italic, or underlined within a paragraph.
 
         Iterates through each text run (formatted text segment) in the paragraph.
-        Maintains temporary lists for ongoing bold and italic phrases. It only adds
-        a phrase to the corresponding list in the `paragraph_data` dictionary
-        ("bold_phrases" or "italic_phrases") when the phrase ends (no longer bold/italic).
-        This ensures that only complete formatted phrases are captured.
+        Maintains temporary lists for ongoing bold, italic, and underlined phrases.
+        It only adds a phrase to the corresponding list in the `paragraph_data` dictionary
+        ("bold_phrases", "italic_phrases", or "underlined_phrases") when the phrase ends
+        (no longer bold/italic/underlined). This ensures that only complete formatted phrases are captured.
 
         Args:
             paragraph (docx.paragraph.Paragraph): A paragraph object from the Word document.
             paragraph_data (dict): A dictionary to store extracted data for the current paragraph.
         """
-        bold_phrase, italic_phrase = [], []
+        bold_phrase, italic_phrase, underlined_phrase = [], [], []
 
         for run in paragraph.runs:
             word = run.text.strip()
@@ -112,31 +102,104 @@ class WordDocParser:
                 paragraph_data["italic_phrases"].append(" ".join(italic_phrase))
                 italic_phrase = []
 
+            if run.underline:
+                underlined_phrase.append(word)
+            elif underlined_phrase:
+                paragraph_data["underlined_phrases"].append(" ".join(underlined_phrase))
+                underlined_phrase = []
+
         if bold_phrase:
             paragraph_data["bold_phrases"].append(" ".join(bold_phrase))
         if italic_phrase:
             paragraph_data["italic_phrases"].append(" ".join(italic_phrase))
+        if underlined_phrase:
+            paragraph_data["underlined_phrases"].append(" ".join(underlined_phrase))
+
 
     def extract_lists(self, paragraph, paragraph_data):
         """
         Extracts numbered and bulleted lists within a paragraph.
 
         Checks if the paragraph style indicates a list ("List Paragraph"). If so,
-        it extracts the list text and its indent level. The indent level helps
-        identify the nesting of lists within the document. The extracted information
-        is then added as a dictionary to the "lists" list within the `paragraph_data` dictionary.
+        it extracts the list text and its indent level. The function primarily focuses
+        on retrieving the last list, considering sublists based on indentation.
 
         Args:
             paragraph (docx.paragraph.Paragraph): A paragraph object from the Word document.
             paragraph_data (dict): A dictionary to store extracted data for the current paragraph.
         """
-        if paragraph.style.name in ['List Paragraph']: 
+        if paragraph.style.name in ["List Paragraph"]:
             list_text = paragraph.text.strip()
             indent_level = paragraph.paragraph_format.left_indent.pt if paragraph.paragraph_format.left_indent else 0
-            paragraph_data["lists"].append({
-                "text": list_text,
-                "indent_level": indent_level
-            })
+
+            last_list_container = None
+            if len(self.data["headings"]) > 0:
+                if len(self.data["headings"][-1]["paragraphs"]) > 0:
+                    last_list_container = self.data["headings"][-1]["paragraphs"][-1]
+            elif len(self.data["paragraphs"]) > 0:
+                last_list_container = self.data["paragraphs"][-1]
+
+            json_string = json.dumps(last_list_container, indent=4)
+            print(json_string)
+
+            if last_list_container:
+                last_list = last_list_container["lists"][-1] if len(last_list_container["lists"]) > 0 else None
+                if last_list:
+                    if indent_level > last_list["indent_level"]:
+                        if "sublist" not in last_list:
+                            last_list["sublist"] = []
+                        last_list["sublist"].append({
+                            "text": list_text,
+                            "indent_level": indent_level
+                        })
+                    else:
+                        last_list_container["lists"].append({
+                            "text": list_text,
+                            "indent_level": indent_level
+                        })
+                else:
+                    last_list_container["lists"].append({
+                        "text": list_text,
+                        "indent_level": indent_level
+                    })
+            else:
+                paragraph_data["lists"].append({
+                    "text": list_text,
+                    "indent_level": indent_level
+                })
+            return True
+        return False
+
+
+    def _update_metadata(self, paragraph):
+        """
+        Private helper function to update the metadata dictionary based on specific keywords.
+
+        This function avoids code duplication and improves readability by encapsulating the logic
+        for updating metadata based on keywords within paragraphs.
+
+        Args:
+            paragraph (docx.paragraph.Paragraph): A paragraph object from the Word document.
+        """
+        text = paragraph.text.lower().strip()
+        if self.__desc_start:
+            self.data["metadata"]["description"] = text
+            self.__desc_start = False
+            return True
+
+        if text.startswith("article-id"):
+            self.data["metadata"]["id"] = text.split("=")[1].strip()
+            return True
+        elif text.startswith("article-type"):
+            self.data["metadata"]["type"] = text.split("=")[1].strip()
+            return True
+        elif text.startswith("article-title"):
+            self.data["metadata"]["title"] = text.split("=")[1].strip()
+            return True
+        elif text.startswith("description"):
+            self.__desc_start = True
+            return True
+        return False
 
     def parse_document(self):
         """
