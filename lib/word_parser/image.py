@@ -15,6 +15,8 @@ class Image:
             self.image = {"name": "images/heart_strength.png", "alt": "health-img"}
         elif self.doc_type in ["code", "tech", "technology", "system design"]:
             self.image = {"name": "images/web-dev.png", "alt": "web-dev-img"}
+        elif self.doc_type in ["embedded", "petalinux"]:
+            self.image = {"name": "images/binary-code.png", "alt": "binary-code-img"}
         elif self.doc_type in ["algo", "algorithm"]:
             self.image = {"name": "images/algorithm.png", "alt": "algo-img"}
         elif self.doc_type == "docker":

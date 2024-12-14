@@ -91,3 +91,16 @@ def confirm_update(message):
       return False
     else:
       print("Invalid input. Please enter 'y' or 'n'.")
+
+def ensure_key_exists_list(data, key):
+  """
+  Ensures that the given key exists in the dictionary. 
+
+  If the key does not exist, it creates an empty list for that key.
+
+  Args:
+    data: The dictionary to check and potentially modify.
+    key: The key to check for existence.
+  """
+  if key not in data:
+    data[key] = []

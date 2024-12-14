@@ -30,12 +30,11 @@ class WordDocParser:
         except PermissionError:
             raise PermissionError(f"Cannot open the file {file_path}. Check read-only permissions.")
         self.__desc_start = False
+        self.__code_start = False
         self.__word_count = 0
         self.data = {
             "metadata": {"id":"","type":"","title":"", "description":""},
-            "headings": [],
-            "paragraphs": [],
-            "images": []
+            "headings": []
         }
 
     def extract_headings(self):
@@ -67,24 +66,22 @@ class WordDocParser:
                 self.data["headings"].append(current_heading)
             else:
                 paragraph_data = {
-                    "text": paragraph.text.strip(),
-                    "bold_phrases": [],
-                    "italic_phrases": [],
-                    "underlined_phrases": [],
-                    "lists": [],
-                    "images": [],
-                    "links": [],
+                    "text": paragraph.text.strip()
                 }
                 self.__extract_formatted_phrases(paragraph, paragraph_data)
                 self.__extract_links(paragraph, paragraph_data)
                 found_list = self.extract_lists(paragraph, paragraph_data)
                 found_image = self.__extract_images_from_para(paragraph, paragraph_data)
+                found_code = self.__extract_code(paragraph, paragraph_data)
 
+                if found_code:
+                    continue
                 if not found_list and not found_image:
                     self.__word_count += len(paragraph.text.strip())
                     if current_heading:
                         current_heading["paragraphs"].append(paragraph_data)
                     else:
+                        comm_utils.ensure_key_exists_list(self.data, "paragraphs")
                         self.data["paragraphs"].append(paragraph_data)
         time_to_read = TimeToRead(self.__word_count)
         self.data["metadata"]["time_to_read"] = time_to_read.get_time_as_obj()
@@ -111,18 +108,21 @@ class WordDocParser:
             if run.bold:
                 bold_phrase.append(word)
             elif bold_phrase:
+                comm_utils.ensure_key_exists_list(paragraph_data, "bold_phrases")
                 paragraph_data["bold_phrases"].append(" ".join(bold_phrase))
                 bold_phrase = []
 
             if run.italic:
                 italic_phrase.append(word)
             elif italic_phrase:
+                comm_utils.ensure_key_exists_list(paragraph_data, "italic_phrases")
                 paragraph_data["italic_phrases"].append(" ".join(italic_phrase))
                 italic_phrase = []
 
             if run.underline:
                 underlined_phrase.append(word)
             elif underlined_phrase:
+                comm_utils.ensure_key_exists_list(paragraph_data, "underlined_phrases")
                 paragraph_data["underlined_phrases"].append(" ".join(underlined_phrase))
                 underlined_phrase = []
 
@@ -160,6 +160,7 @@ class WordDocParser:
 
         # Store the extracted links in the paragraph data dictionary
         if links:
+            comm_utils.ensure_key_exists_list(paragraph_data, "links")
             paragraph_data['links'] = links
 
 
@@ -207,6 +208,7 @@ class WordDocParser:
                         "indent_level": indent_level
                     })
             else:
+                comm_utils.ensure_key_exists_list(paragraph_data, "lists")
                 paragraph_data["lists"].append({
                     "text": list_text,
                     "indent_level": indent_level
@@ -221,20 +223,21 @@ class WordDocParser:
                 last_list_container = self.data["headings"][-1]["paragraphs"][-1]
         elif len(self.data["paragraphs"]) > 0:
             last_list_container = self.data["paragraphs"][-1]
-
-        for image in self.data["images"]:
-            if image["caption"] == paragraph.text.strip():
-                if last_list_container:
-                    last_list_container["images"].append({
-                        "id": image["id"],
-                        "caption": image["caption"]
-                    })
-                else:
-                    paragraph_data["images"].append({
-                        "id": image["id"],
-                        "caption": image["caption"]
-                    })
-                return True
+        if "images" in self.data:
+            for image in self.data["images"]:
+                if image["caption"] == paragraph.text.strip():
+                    if last_list_container:
+                        last_list_container["images"].append({
+                            "id": image["id"],
+                            "caption": image["caption"]
+                        })
+                    else:
+                        comm_utils.ensure_key_exists_list(paragraph_data, "images")
+                        paragraph_data["images"].append({
+                            "id": image["id"],
+                            "caption": image["caption"]
+                        })
+                    return True
         return False
 
 
@@ -287,14 +290,46 @@ class WordDocParser:
 
             # Print confirmation and add image data to output
             print(f"Saved image: {image_filename}")
+
+            comm_utils.ensure_key_exists_list(self.data, "images")
             self.data["images"].append({
                 "id": f"{comm_utils.fill_string_with_zeros(i+1,3)}",  # Create unique ID with leading zeros
                 "data": image_data,
                 "caption": caption
             })
 
-    def __extract_code(self, paragraph):
-        pass
+    def __extract_code(self, paragraph, paragraph_data):
+        last_code_container = None
+        if len(self.data["headings"]) > 0:
+            if len(self.data["headings"][-1]["paragraphs"]) > 0:
+                last_code_container = self.data["headings"][-1]["paragraphs"][-1]
+        elif len(self.data["paragraphs"]) > 0:
+            last_code_container = self.data["paragraphs"][-1]
+        
+        text = paragraph.text.strip()
+        if last_code_container:
+            last_code_blocks = last_code_container["code-blocks"][-1] if "code-blocks" in last_code_container and len(last_code_container["code-blocks"]) > 0 else None
+            if last_code_blocks:
+                if self.__code_start:
+                        if text.lower() == "code-end": 
+                            self.__code_start = False
+                        elif text.split("=")[0].lower() == "language": 
+                            last_code_blocks["language"] = text.split("=")[1].lower()
+                        else:
+                            last_code_blocks["code"].append(text)
+                        return True
+            else:
+                if text.lower() == "code-start":
+                    self.__code_start = True
+                    comm_utils.ensure_key_exists_list(last_code_container, "code-blocks")
+                    last_code_container["code-blocks"].append({
+                        "id": comm_utils.fill_string_with_zeros(len(last_code_container["code-blocks"]) + 1, 3),
+                        "language": "",
+                        "code": []
+                    })
+                    return True
+        return False
+
 
     def __update_metadata(self, paragraph):
         """
@@ -323,7 +358,7 @@ class WordDocParser:
             self.data["metadata"]["image"] = image.get_image()
             return True
         elif text.startswith("article-title"):
-            self.data["metadata"]["title"] = text.split("=")[1].strip()
+            self.data["metadata"]["title"] = text.split("=")[1].strip().title()
             return True
         elif text.startswith("description"):
             self.__desc_start = True
