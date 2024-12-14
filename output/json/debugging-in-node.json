@@ -1,0 +1,18 @@
+{
+    "headings": [
+        {
+            "text": "Debugging in Node Using Chrome Devtools",
+            "level": "Heading 1"
+        },
+        {
+            "text": "Setting up Stack Trace",
+            "level": "Heading 1"
+        }
+    ],
+    "bold_phrases": [],
+    "italic_phrases": [
+        "-- inspect ",
+        "--inspect",
+        "chrome://inspect/#devices"
+    ]
+}
