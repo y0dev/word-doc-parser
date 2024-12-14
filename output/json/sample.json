@@ -9,5 +9,48 @@
         "membership",
         "cause"
     ],
-    "italic_phrases": []
+    "italic_phrases": [],
+    "lists": [
+        {
+            "text": "List",
+            "indent_level": 0
+        },
+        {
+            "text": "Asnot",
+            "indent_level": 0
+        },
+        {
+            "text": "Jlks",
+            "indent_level": 0
+        },
+        {
+            "text": "Sjklsdk",
+            "indent_level": 0
+        },
+        {
+            "text": "Djljdsljds",
+            "indent_level": 0
+        }
+    ],
+    "paragraphs": [
+        "Article-id = sample template",
+        "Description",
+        "This the sample template for testing purposes only.",
+        "Why am I Presbyterian",
+        "",
+        "There is an endless debate on covenant membership. Who is a part of the covenant and who is not? This question is a good question cause you to search the scriptures for answers. I would start from Genesis and end in Revelation.",
+        "List",
+        "Asnot",
+        "Jlks",
+        "fgfd",
+        "Sjklsdk",
+        "Djljdsljds",
+        "",
+        "Preparing for system design interviews can be helpful when you have help from some of the big tech companies. Some companies share some of their technical details on tech blogs that are given to the public. Their reason for sharing this information is to encourage and challenge any future employees to problem solve and to gain an understanding of what it’s like working at their company. The tech blogs are Engineering at Meta, Meta Research, AWS Architecture Blog, Amazon Science Blog, Netflix TechBlog, Google Research, Engineering at Quora, Uber Engineering Blog, Databricks Blog, Pinterest Engineering, BlackRock Engineering, Lyft Engineering, and Salesforce Engineering.",
+        "",
+        "",
+        "",
+        "",
+        "Figure"
+    ]
 }
