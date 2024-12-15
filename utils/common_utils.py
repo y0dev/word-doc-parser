@@ -1,4 +1,5 @@
 import os
+import json
 from datetime import datetime
 
 def generate_timestamp_millis(dt=None):
@@ -104,3 +105,25 @@ def ensure_key_exists_list(data, key):
   """
   if key not in data:
     data[key] = []
+
+def read_json_file(file_path):
+  """
+  Reads data from a JSON file.
+
+  Args:
+    file_path: Path to the JSON file.
+
+  Returns:
+    The data loaded from the JSON file as a Python object.
+    Returns None if the file cannot be read or parsed.
+  """
+  try:
+    with open(file_path, 'r') as f:
+      data = json.load(f)
+    return data
+  except FileNotFoundError:
+    print(f"Error: File not found: {file_path}")
+    return None
+  except json.JSONDecodeError as e:
+    print(f"Error: Invalid JSON data in {file_path}: {e}")
+    return None

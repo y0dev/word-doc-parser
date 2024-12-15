@@ -34,7 +34,8 @@ class WordDocParser:
         self.__word_count = 0
         self.data = {
             "metadata": {"id":"","type":"","title":"", "description":""},
-            "headings": []
+            "headings": [],
+            "paragraphs" : []
         }
 
     def extract_headings(self):
@@ -127,10 +128,13 @@ class WordDocParser:
                 underlined_phrase = []
 
         if bold_phrase:
+            comm_utils.ensure_key_exists_list(paragraph_data, "bold_phrases")
             paragraph_data["bold_phrases"].append(" ".join(bold_phrase))
         if italic_phrase:
+            comm_utils.ensure_key_exists_list(paragraph_data, "italic_phrases")
             paragraph_data["italic_phrases"].append(" ".join(italic_phrase))
         if underlined_phrase:
+            comm_utils.ensure_key_exists_list(paragraph_data, "underlined_phrases")
             paragraph_data["underlined_phrases"].append(" ".join(underlined_phrase))
     
     def __extract_links(self, paragraph, paragraph_data):
@@ -188,11 +192,11 @@ class WordDocParser:
                 last_list_container = self.data["paragraphs"][-1]
 
             if last_list_container:
-                last_list = last_list_container["lists"][-1] if len(last_list_container["lists"]) > 0 else None
+                print(list_text, indent_level, paragraph.paragraph_format.left_indent)
+                last_list = last_list_container["lists"][-1] if "lists" in last_list_container and  len(last_list_container["lists"]) > 0 else None
                 if last_list:
                     if indent_level > last_list["indent_level"]:
-                        if "sublist" not in last_list:
-                            last_list["sublist"] = []
+                        comm_utils.ensure_key_exists_list(last_list, "sublist")
                         last_list["sublist"].append({
                             "text": list_text,
                             "indent_level": indent_level
@@ -203,6 +207,7 @@ class WordDocParser:
                             "indent_level": indent_level
                         })
                 else:
+                    comm_utils.ensure_key_exists_list(last_list_container, "lists")
                     last_list_container["lists"].append({
                         "text": list_text,
                         "indent_level": indent_level
@@ -350,12 +355,15 @@ class WordDocParser:
         if text.startswith("article-id"):
             self.data["metadata"]["id"] = text.split("=")[1].strip().replace(" ","-")
             return True
-        elif text.startswith("article-type"):
+        elif text.startswith("article-category"):
             tags = Tags(text.split("=")[1].strip())
             image = Image(text.split("=")[1].strip())
-            self.data["metadata"]["type"] = text.split("=")[1].strip()
+            self.data["metadata"]["category"] = text.split("=")[1].strip()
             self.data["metadata"]["tags"] = tags.get_tag_list()
             self.data["metadata"]["image"] = image.get_image()
+            return True
+        elif text.startswith("article-type"):
+            self.data["metadata"]["type"] = text.split("=")[1].strip().lower()
             return True
         elif text.startswith("article-title"):
             self.data["metadata"]["title"] = text.split("=")[1].strip().title()
